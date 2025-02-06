@@ -108,7 +108,7 @@ int main() {
     }
     draw_border();
     attron(A_BOLD);
-    mvprintw(LINES / 2 - 5 , COLS / 2 , "ROUGE (best game ever)");
+    mvprintw(LINES / 2 - 5 , COLS / 2 , "ROUGE (best game)");
     attroff(A_BOLD);
     mvprintw(LINES / 2 + 4 , COLS / 2  - 10, "press any key");
     char entering = getch();
