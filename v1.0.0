@@ -12,6 +12,7 @@
 #define WIDTH 120
 #define HEIGHT 45
 #define ROOMS 6
+
 typedef struct {
     char symbol;
     int x;
@@ -19,11 +20,24 @@ typedef struct {
     bool seen;
     bool trap;
 } Point;
+
 typedef struct {
     int x, y;
     int health;
     int damage;
 } Player;
+
+typedef enum {
+    PLAYER_TURN,
+    NO_COMBAT
+} Turn;
+
+typedef enum {
+    EXPLORE,
+} GameState;
+
+GameState gameState = EXPLORE;
+Turn currentTurn = PLAYER_TURN;
 int score;
 char massage_resault;
 int nor = 6;
@@ -41,11 +55,11 @@ char dirname[150];
 char mapafterreading[HEIGHT][WIDTH];
 char nameoftheplayer[100];
 void draw_border();
-void signup();
 int loadUsers(struct User users[]);
 int login(struct User users[], int userCount);
 void printMenu(WINDOW *menu_win, int highlight, char *choices[], int n_choices);
 void display_map(const char *filename);
+void delete_directory_contents(const char *dirname);
 void generateMap(char mapafterreading[HEIGHT][WIDTH]);
 void generateRoom(char mapafterreading[HEIGHT][WIDTH], Room *rooms, int roomIndex);
 bool roomsOverlap(Room *room1, Room *room2);
@@ -57,11 +71,11 @@ void printMap(char mapafterreading[HEIGHT][WIDTH]);
 void decorateRoom(char mapafterreading[HEIGHT][WIDTH], Room *room);
 void traproom(char mapafterreading[HEIGHT][WIDTH], Room *room);
 void spawnPlayer(char mapafterreading[HEIGHT][WIDTH], Room rooms[], int nor);
-void createFileAndPrintMap(char mapafterreading[HEIGHT][WIDTH],char nameoftheplayer[100], int i);
 void display_mapafterreading(Point **mapafterreading, int rows, int cols,int color);
 void reveal_points(Point **mapafterreading, int char_x, int char_y, int rows, int cols, int range);
-void display_game_over() ;
 void display_health_bar(int health, int max_health);
+void move_character(int *lvl,Point **mapafterreading, int *x, int *y, int new_x, int new_y, int rows, int cols, int spawn_x, int spawn_y, int *health);
+char createMessageWindow(const char *message);
 void displayScoreboard(WINDOW *win,struct User players[], int count, int start, const char *username);
 int readPlayersFromFile(const char *filename,struct User players[]);
 int comparePlayers(const void *a, const void *b);
@@ -80,6 +94,7 @@ void save_seen_points(Point **mapafterreading, int rows, int cols, const char *f
     }
     fclose(file);
 }
+
 void load_seen_points(Point **mapafterreading, int rows, int cols, const char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
@@ -94,6 +109,12 @@ void load_seen_points(Point **mapafterreading, int rows, int cols, const char *f
     }
     fclose(file);
 }
+
+
+
+
+
+
 int main() {
     initscr(); 
     curs_set(FALSE);
@@ -106,6 +127,7 @@ int main() {
         init_pair(2, COLOR_RED, COLOR_BLACK);
         init_pair(3, COLOR_WHITE, COLOR_BLACK);
     }
+
     draw_border();
     attron(A_BOLD);
     mvprintw(LINES / 2 - 5 , COLS / 2 - 11 , "ROUGE (best game)");
@@ -121,15 +143,19 @@ start_menu:
     int highlight = 1;
     int choice = 0;
     int c;
+
     clear();
     noecho();
     cbreak(); 
+
     int height = 10;
     int width = 40;
     int start_y = (LINES - height) / 2;
     int start_x = (COLS - width) / 2; 
+
     menu_win = newwin(height, width, start_y, start_x);
     keypad(menu_win, TRUE); 
+
     char *choices_start[] = {
         "Log in",
         "Sign up",
@@ -137,6 +163,7 @@ start_menu:
     };
     int m_choices = sizeof(choices_start) / sizeof(char *);
     printMenu(menu_win, highlight, choices_start, m_choices);
+
     while (1) {
         c = wgetch(menu_win);
         switch (c) {
@@ -162,9 +189,14 @@ start_menu:
         if (choice != 0) 
             break;
     }
+
+
+
+
     switch(choice){
         case 1:
-        mvprintw(LINES / 2  , COLS / 2.5, "login");
+
+        mvprintw(LINES / 2  , COLS / 2.5, "Login");
 
             struct User users[100];
             int userCount = loadUsers(users);
@@ -180,8 +212,10 @@ start_menu:
 
                }
             }
+
             break;
         case 2:
+
             char filename[] = "users.txt";
             signup(filename);
             goto main_menu;
@@ -191,24 +225,29 @@ start_menu:
         mkdir("guest", 0777);
         strcpy(username, "guest");
         goto main_menu;
+
         break;
         default:
-        mvprintw(LINES / 2  , COLS / 2.5, "wrong command");
-        break;
+            mvprintw(LINES / 2  , COLS / 2.5, "wrong command");
+            break;
     }
 main_menu:
     clear();
     draw_border();
+
     choice = 0;
     highlight = 1;
+
+
     char *choices[] = {
-        "new game",
-        "Countinue game",
+        "Start New Game",
+        "Countinue expeloring",
         "Score board",
         "Setting",
     };
     int n_choices = sizeof(choices) / sizeof(char *);
     printMenu(menu_win, highlight, choices, n_choices);
+
     while (1) {
         c = wgetch(menu_win);
         switch (c) {
@@ -240,36 +279,35 @@ main_menu:
     snprintf(dirname, sizeof(dirname), "%s", username);
     refresh();
     clear();
+
+    delete_directory_contents(dirname);
     srand(time(NULL));
+
     char mapafterreading[HEIGHT][WIDTH];
     char nameoftheplayer[100];
+
     for (int i = 1 ; i <= 4 ; i++){
         generateMap(mapafterreading);
+        //printMap(mapafterreading);
         createFileAndPrintMap(mapafterreading,dirname,i);
     }
     char ch = getch();
     goto game;
+
+
+
     } else if (choice == 2) {
 game: 
     char filename[200];
-    sprintf(filename , "%s/saved%d_map.dat",username,lvl);
-        char filename_food[200];
-    sprintf(filename_food , "%s/food_inventory.txt",username);
-        char filename_spell[200];
-    sprintf(filename_spell , "%s/spell_inventory.txt",username);
-        char filename_weapone[200];
-    sprintf(filename_weapone , "%s/weapon_inventory.txt",username);
-if(lvl ==5){
-}
     clear();
     int rows = 0, cols = 0;
     Point **mapafterreading = NULL;
     int x = 0, y = 0; 
     int spawn_x = 0, spawn_y = 0;
     int health = 50, max_health = 50;
-    int speed = 1; 
-    int damage = 1; 
-    int color = 20;
+    int speed = 1; // سرعت اولیه
+    int damage = 1; // آسیب اولیه
+    int color = 20;//رنگ کاراکتر
     char file_path[200];
     sprintf(file_path,"%s/map%d.txt",username,lvl );
     FILE *file = fopen(file_path, "r");
@@ -322,12 +360,123 @@ if(lvl ==5){
         }
     }
 load_seen_points(mapafterreading, rows, cols, filename);
+
     noecho();
     cbreak();
     keypad(stdscr, TRUE);
+    char filename_weapone1[200];
+    sprintf(filename_weapone1 , "%s/weapon_inventory.txt",username);
     Player player = {x, y, health};
     display_mapafterreading(mapafterreading, rows, cols, color);
     display_health_bar(health, max_health);
+int lvl_check = lvl;
+int attacker_num;
+    int ch;
+    while ((ch = getch()) != 27) {
+ ch = tolower(ch);
+        if (gameState == EXPLORE) {
+        switch (ch) {
+            case 'w':
+                move_character(&lvl,mapafterreading, &player.x, &player.y, player.x - 1, player.y, rows, cols, spawn_x, spawn_y, &player.health);
+            if(lvl_check > lvl || lvl_check < lvl){
+                save_seen_points(mapafterreading, rows, cols, filename);
+                goto game;
+            }
+                break;
+            case 's':
+                move_character(&lvl,mapafterreading, &player.x, &player.y, player.x + 1, player.y, rows, cols, spawn_x, spawn_y, &player.health);
+            if(lvl_check > lvl || lvl_check < lvl){
+                save_seen_points(mapafterreading, rows, cols, filename);
+                goto game;
+
+            }
+                break;
+            case 'a':
+                move_character(&lvl ,mapafterreading, &player.x, &player.y, player.x, player.y - 1, rows, cols, spawn_x, spawn_y, &player.health);
+                if(lvl_check > lvl || lvl_check < lvl){
+                    save_seen_points(mapafterreading, rows, cols, filename);
+                    goto game;
+                }
+                break;
+            case 'd':
+                move_character(&lvl ,mapafterreading, &player.x, &player.y, player.x, player.y + 1, rows, cols, spawn_x, spawn_y, &player.health);
+                if(lvl_check > lvl || lvl_check < lvl){
+                    save_seen_points(mapafterreading, rows, cols, filename);
+                    goto game;
+                }
+                break;
+            case 'q':
+                move_character(&lvl ,mapafterreading, &player.x, &player.y, player.x - 1, player.y - 1, rows, cols, spawn_x, spawn_y, &player.health);
+                if(lvl_check > lvl || lvl_check < lvl){
+                    save_seen_points(mapafterreading, rows, cols, filename);
+                    goto game;
+                }
+                break;
+            case 'e':
+                move_character(&lvl ,mapafterreading, &player.x, &player.y, player.x - 1, player.y + 1, rows, cols, spawn_x, spawn_y, &player.health);
+                if(lvl_check > lvl || lvl_check < lvl){
+                    save_seen_points(mapafterreading, rows, cols, filename);
+                    goto game;
+                }
+                break;
+            case 'z':
+                move_character(&lvl ,mapafterreading, &player.x, &player.y, player.x + 1, player.y - 1, rows, cols, spawn_x, spawn_y, &player.health);
+                if(lvl_check > lvl || lvl_check < lvl){
+                    save_seen_points(mapafterreading, rows, cols, filename);
+                    goto game;
+                }
+                break;
+            case 'c':
+                move_character(&lvl ,mapafterreading, &player.x, &player.y, player.x + 1, player.y + 1, rows, cols, spawn_x, spawn_y, &player.health);
+                if(lvl_check > lvl || lvl_check < lvl){
+                    save_seen_points(mapafterreading, rows, cols, filename);
+                    goto game;
+                }
+                break;
+            case 'f':
+                    int directionX = 0, directionY = 0;
+                int gh = createMessageWindow("choose direction:(with QWEASDZC)");
+                gh = tolower(gh);
+                switch (gh) {
+                    case 'q':
+                        directionY = -1; directionX = -1; break;
+                    case 'w':
+                        directionY = 0; directionX = -1; break;
+                    case 'e':
+                        directionY = 1; directionX = -1; break;
+                    case 'a':
+                        directionY = -1; directionX = 0; break;
+                    case 'd':
+                        directionY = 1; directionX = 0; break; 
+                    case 'z':
+                        directionY = -1; directionX = 1; break;
+                    case 's':
+                        directionY = 0; directionX = 1; break; 
+                    case 'c':
+                        directionY = 1; directionX = 1; break; 
+                    default:
+                        directionY = 0; directionX = 0; break;
+                }
+
+                    if (directionX != 0 || directionY != 0) {
+                        directionX = 0; 
+                        directionY = 0; 
+                    }
+
+        }
+    }
+        if (health > 0) {
+            display_mapafterreading(mapafterreading, rows, cols, color);
+            display_health_bar(health, max_health);
+        } 
+        else {
+            display_game_over();
+            char command = getch();
+            if (command) {
+                goto end;
+            }
+        }
+    }
 end:
     clear();
     for (int i = 0; i < rows; i++) {
@@ -346,7 +495,7 @@ end:
         init_color(30, 1000, 843, 0); 
         init_color(31, 700, 1000, 1000); 
         init_color(32, 804, 498, 196);
-        init_pair(1, 31, COLOR_BLACK); 
+        init_pair(1, 31, COLOR_BLACK);
         init_pair(2, 30, COLOR_BLACK); 
         init_pair(3, 32, COLOR_BLACK); 
         init_pair(4, COLOR_RED, COLOR_BLACK); 
@@ -422,6 +571,7 @@ int loadUsers(struct User users[])
 int login(struct User users[], int userCount) 
 {
     char password[50];
+
     draw_border();
     echo();
     mvprintw(LINES / 2  , COLS / 2.5, "Rouge's name?");
@@ -435,16 +585,17 @@ int login(struct User users[], int userCount)
         if (strcmp(users[i].username, username) == 0 && strcmp(users[i].password, password) == 0) {
             clear();
             draw_border();
-            mvprintw(LINES / 2 , COLS / 2.5, "long time no see my friend");
+            mvprintw(LINES / 2 , COLS / 2.5, "Welcome back %s",username);
             char temp = getch();
             return 1;
         }
     }
-    clear();
-    draw_border();
-    mvprintw(LINES / 2  , COLS / 2.5, "you are not %s get outaa here",username);
-    return 2;
+            clear();
+            draw_border();
+            mvprintw(LINES / 2  , COLS / 2.5, "you're not %s get out of here!",username);
+            return 2;
 }
+
 int checkUsernameExists(char *filename, char *username) 
 {
     FILE *file = fopen(filename, "r");
@@ -461,20 +612,33 @@ int checkUsernameExists(char *filename, char *username)
             return 1;
         }
     }
+
     fclose(file);
     return 0;
 }
+
 int checkPasswordValidity(char *password) 
 {
-    if (strlen(password) < 7) return 0;
+    if (strlen(password) < 7) {
+        return 0;
+    }
+
     int hasDigit = 0, hasUpper = 0, hasLower = 0;
     for (int i = 0; i < strlen(password); i++) {
-        if (isdigit(password[i])) hasDigit = 1;
-        if (isupper(password[i])) hasUpper = 1;
-        if (islower(password[i])) hasLower = 1;
+        if (isdigit(password[i])) {
+            hasDigit = 1;
+        }
+        if (isupper(password[i])) {
+            hasUpper = 1;
+        }
+        if (islower(password[i])) {
+            hasLower = 1;
+        }
     }
+
     return hasDigit && hasUpper && hasLower;
 }
+
 int checkEmailFormat(char *email) 
 {
     char *atSign = strchr(email, '@');
@@ -487,21 +651,24 @@ int checkEmailFormat(char *email)
     }
     return 1;
 }
+
 void signup(char *filename) 
 {
+
     char password[100];
     char email[100];
     score = 0;
         draw_border();
-        mvprintw(LINES / 2  , COLS / 2.5, "what's you'r name user? ");
+        mvprintw(LINES / 2  , COLS / 2.5, "what's your name user? ");
         echo();
         scanw("%s",username);
         noecho();
         username[strcspn(username, "\n")] = 0;
+
     if (checkUsernameExists(filename, username)) {
         clear();
         draw_border();
-        mvprintw(LINES / 2  , COLS / 2.5, "You were here %s, try another name.", username);
+        mvprintw(LINES / 2  , COLS / 2.5, "Your an old friend.");
         char temp = getch();
             struct User users[100];
             int userCount = loadUsers(users);
@@ -513,7 +680,7 @@ void signup(char *filename)
     while(1){
     clear();
     draw_border();
-    mvprintw(LINES / 2  , COLS / 2.5, "Whats your password?");
+    mvprintw(LINES / 2  , COLS / 2.5, "Creat a password...");
         echo();
         scanw("%s",password);
         noecho();
@@ -524,14 +691,14 @@ void signup(char *filename)
     else if (!checkPasswordValidity(password)) {
     clear();
     draw_border();
-    mvprintw(LINES / 2  , COLS / 2.5, "At least 7 words, use upper and lower and numbers. (press space to continue)");
+    mvprintw(LINES / 2  , COLS / 2.5, "At least 7 words, include upper and lower and numbers(press space to continue)");
     char temp = getch();
     }
     }
     while(1){
         clear();
         draw_border();
-        mvprintw(LINES / 2  , COLS / 2.5, "Please enter your email...");
+        mvprintw(LINES / 2  , COLS / 2.5, "Enter your email...");
         move(LINES / 2  + 5, COLS/ 2.5);
         echo();
         scanw("%s",email);
@@ -540,10 +707,11 @@ void signup(char *filename)
         if(checkEmailFormat(email)){
             break;
         }
+
         else if (!checkEmailFormat(email)) {
             clear();
             draw_border();
-            mvprintw(LINES / 2  , COLS / 2.5, "Invalid email(press space to continue)");
+            mvprintw(LINES / 2  , COLS / 2.5, "Invalid email (press space to continue)");
             char temp = getch();
         }
     }
@@ -552,15 +720,19 @@ void signup(char *filename)
         printf("Error opening file.\n");
         return;
     }
+
     fprintf(file, "%s %s %s %d\n", username, password, email, score);
     clear();
     draw_border();
+    
     mvprintw(LINES / 2 , COLS / 2.5, "Welcome to your game %s",username);
     char temp = getch();
     fclose(file);
     mkdir(username, 0777); 
+
     return;
 }
+
 void draw_border()
 {
     attron(COLOR_PAIR(3));
@@ -576,50 +748,64 @@ void draw_border()
     }
     attroff(COLOR_PAIR(3));
 }
-void display_map(const char *filename)
-{
+
+void display_map(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         perror("no file found");
         exit(EXIT_FAILURE);
     }
+
     char **lines = NULL;
     char line[256];
     int count = 0;
+
     while (fgets(line, sizeof(line), file)) {
         lines = realloc(lines, sizeof(char*) * (count + 1));
         lines[count] = strdup(line);
         count++;
     }
     fclose(file);
+
     initscr();
     noecho();
     cbreak();
+
     for (int i = 0; i < count; i++) {
         mvprintw(i, 0, "%s" ,lines[i]);
     }
+
     refresh();  
     getch();   
-    endwin();
+    endwin();    
+
     for (int i = 0; i < count; i++) {
         free(lines[i]);
     }
     free(lines);
 }
+
 void generateMap(char mapafterreading[HEIGHT][WIDTH]) {
+
         for (int i = 0; i < HEIGHT; i++) {
             for (int j = 0; j < WIDTH; j++) {
                 mapafterreading[i][j] = ' ';
             }
         }
+
         Room rooms[ROOMS];
+
         for (int i = 0; i < ROOMS; i++) {
             generateRoom(mapafterreading, rooms, i);
         }
+
         for (int i = 0; i < ROOMS - 1; i++) {
             connectRooms(mapafterreading, &rooms[i], &rooms[i + 1]);
         }
+        
+
         refillRooms(mapafterreading, rooms);
+
         addStairs(mapafterreading);
         for (int i = 0; i < ROOMS; i++) {
             decorateRoom(mapafterreading, &rooms[i]);
@@ -628,11 +814,15 @@ void generateMap(char mapafterreading[HEIGHT][WIDTH]) {
             traproom(mapafterreading, &rooms[i]);
         }
         spawnPlayer(mapafterreading, rooms ,nor);
+
+
 }
+
 void spawnPlayer(char mapafterreading[HEIGHT][WIDTH], Room rooms[], int nor) {
     for (int i = 0; i < nor; i++) {
         Room room = rooms[i];
         bool hasExit = false;
+
         for (int y = room.y; y < room.y + room.height; y++) {
             for (int x = room.x; x < room.x + room.width; x++) {
                 if (mapafterreading[y][x] == '>') {
@@ -642,6 +832,7 @@ void spawnPlayer(char mapafterreading[HEIGHT][WIDTH], Room rooms[], int nor) {
             }
             if (hasExit) break;
         }
+
         if (!hasExit) {
             int spawnX = room.x + rand() % room.width;
             int spawnY = room.y + rand() % room.height;
@@ -650,10 +841,12 @@ void spawnPlayer(char mapafterreading[HEIGHT][WIDTH], Room rooms[], int nor) {
         }
     }
 }
+
 void traproom(char mapafterreading[HEIGHT][WIDTH], Room *room) {
     if (rand() % 2 == 0) {
         return; 
     }
+
     for (int y = room->y; y < room->y + room->height; y++) {
         for (int x = room->x; x < room->x + room->width; x++) {
             if (rand() % 20== 0 && mapafterreading[y][x+1] != '+' && mapafterreading[y+1][x] != '+' && mapafterreading[y-1][x] != '+' && mapafterreading[y][x-1] != '+' && mapafterreading[x][y] != 'O' && mapafterreading[y][x] != '>') { 
@@ -663,6 +856,7 @@ void traproom(char mapafterreading[HEIGHT][WIDTH], Room *room) {
         }
     }
 }
+
 void decorateRoom(char mapafterreading[HEIGHT][WIDTH], Room *room) {
     if (rand() % 2 == 0) {
         return; 
@@ -677,9 +871,12 @@ void decorateRoom(char mapafterreading[HEIGHT][WIDTH], Room *room) {
         }
     }
 }
+
+
 void generateRoom(char mapafterreading[HEIGHT][WIDTH], Room *rooms, int roomIndex) {
     Room newRoom;
     bool overlap;
+
     do {
         overlap = false;
         newRoom.width = 4 + rand() % 3;
@@ -694,12 +891,15 @@ void generateRoom(char mapafterreading[HEIGHT][WIDTH], Room *rooms, int roomInde
             }
         }
     } while (overlap);
+
     rooms[roomIndex] = newRoom;
+
     for (int i = newRoom.y; i < newRoom.y + newRoom.height; i++) {
         for (int j = newRoom.x; j < newRoom.x + newRoom.width; j++) {
             mapafterreading[i][j] = '.';
         }
     }
+
     for (int i = newRoom.y - 1; i <= newRoom.y + newRoom.height; i++) {
         if (i >= 0 && i < HEIGHT) {
             if (newRoom.x - 1 >= 0) mapafterreading[i][newRoom.x - 1] = '|';
@@ -713,29 +913,34 @@ void generateRoom(char mapafterreading[HEIGHT][WIDTH], Room *rooms, int roomInde
         }
     }
 }
+
 bool roomsOverlap(Room *room1, Room *room2) {
     return !(room1->x + room1->width < room2->x ||
              room1->x > room2->x + room2->width ||
              room1->y + room1->height < room2->y ||
              room1->y > room2->y + room2->height);
 }
+
 bool roomsTooClose(Room *room1, Room *room2) {
     return !(room1->x + room1->width + 6 < room2->x ||
              room1->x > room2->x + room2->width + 6 ||
              room1->y + room1->height + 6 < room2->y ||
              room1->y > room2->y + room2->height + 6);
 }
+
 void connectRooms(char mapafterreading[HEIGHT][WIDTH], Room *room1, Room *room2) {
     int x = room1->x + room1->width / 2;
     int y = room1->y + room1->height / 2;
     int targetX = room2->x + room2->width / 2;
     int targetY = room2->y + room2->height / 2;
+
     while (x != targetX || y != targetY) {
         if ((mapafterreading[y][x] == '|') || mapafterreading[y][x] == '-') {
             mapafterreading[y][x] = '+';
         } else if (mapafterreading[y][x] != '.' && mapafterreading[y][x] != '-' && mapafterreading[y][x] != '|') {
             mapafterreading[y][x] = '#';
         }
+
         if (rand() % 2 == 0) { 
             if (x != targetX) {
                 x += (targetX > x) ? 1 : -1;
@@ -751,6 +956,7 @@ void connectRooms(char mapafterreading[HEIGHT][WIDTH], Room *room1, Room *room2)
         }
     }
 }
+
 void addStairs(char mapafterreading[HEIGHT][WIDTH]) {
     int x, y;
     do {
@@ -759,6 +965,7 @@ void addStairs(char mapafterreading[HEIGHT][WIDTH]) {
     } while (mapafterreading[y][x] != '.');
     mapafterreading[y][x] = '>';
 }
+
 void refillRooms(char mapafterreading[HEIGHT][WIDTH], Room *rooms) {
     for (int i = 0; i < ROOMS; i++) {
         Room room = rooms[i];
@@ -769,6 +976,7 @@ void refillRooms(char mapafterreading[HEIGHT][WIDTH], Room *rooms) {
         }
     }
 }
+
 void printMapToFile(char mapafterreading[HEIGHT][WIDTH], const char *filePath) {
     FILE *file = fopen(filePath, "w");
     if (file == NULL) {
@@ -783,11 +991,13 @@ void printMapToFile(char mapafterreading[HEIGHT][WIDTH], const char *filePath) {
     }
     fclose(file);
 }
+
 void createFileAndPrintMap(char mapafterreading[HEIGHT][WIDTH],char *nameoftheplayer, int i) {
     char fileName[200];
     sprintf(fileName, "%s/map%d.txt",nameoftheplayer, i);
     printMapToFile(mapafterreading, fileName);
 }
+
 void printMap(char mapafterreading[HEIGHT][WIDTH]) {
     for (int i = 0; i < HEIGHT; i++) {
         for (int j = 0; j < WIDTH; j++) {
@@ -807,6 +1017,7 @@ void display_mapafterreading(Point **mapafterreading, int rows, int cols, int co
     init_pair(22, 22, COLOR_BLACK);
     init_color(23, 1000, 0 , 0);
     init_pair(23, 23, COLOR_BLACK); 
+
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
             if (mapafterreading[i][j].seen) {
@@ -835,6 +1046,8 @@ void display_mapafterreading(Point **mapafterreading, int rows, int cols, int co
     }
     refresh();
 }
+
+
 void reveal_points(Point **mapafterreading, int char_x, int char_y, int rows, int cols, int range) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -845,6 +1058,8 @@ void reveal_points(Point **mapafterreading, int char_x, int char_y, int rows, in
         }
     }
 }
+
+
 void display_health_bar(int health, int max_health) {
     mvprintw(0, 70, "Health: ");
     for (int i = 0; i < max_health; i++) {
@@ -856,26 +1071,75 @@ void display_health_bar(int health, int max_health) {
     }
     refresh();
 }
+
+
 char createMessageWindow(const char *message) {
     int height = 5;
     int width = 40; 
     int startY = 0;
     int startX = 0;
     curs_set(FALSE);
+
     WINDOW *msgWin = newwin(height, width, startY, startX);
     box(msgWin, 0, 0);
     mvwprintw(msgWin, 1, 1, "Game Messages:");
     wrefresh(msgWin);
+
     mvwprintw(msgWin, 2, 1, "%s", message);
     wrefresh(msgWin);
+
     massage_resault = getch();
     delwin(msgWin);
     return massage_resault;
 }
+
+
+void move_character(int *lvl,Point **mapafterreading, int *x, int *y, int new_x, int new_y, int rows, int cols, int spawn_x, int spawn_y, int *health) {
+    static char previous_symbol = '>';
+
+    if (new_x >= 0 && new_x < rows && new_y >= 0 && new_y < cols && mapafterreading[new_x][new_y].symbol != '|' && mapafterreading[new_x][new_y].symbol != '-' && mapafterreading[new_x][new_y].symbol != 'O' && mapafterreading[new_x][new_y].symbol != ' ') {
+        mapafterreading[*x][*y].symbol = (*x == spawn_x && *y == spawn_y) ? '>' : previous_symbol;
+
+        previous_symbol = (mapafterreading[new_x][new_y].symbol == '/'||mapafterreading[new_x][new_y].symbol == 'F' || mapafterreading[new_x][new_y].symbol == '.' || mapafterreading[new_x][new_y].symbol == 'P' || mapafterreading[new_x][new_y].symbol == 'c' || mapafterreading[new_x][new_y].symbol == 'C' || mapafterreading[new_x][new_y].symbol == 'f' || mapafterreading[new_x][new_y].symbol == 's'  || mapafterreading[new_x][new_y].symbol == 'I' ) ? '.' : mapafterreading[new_x][new_y].symbol;
+
+        if (mapafterreading[new_x][new_y].trap) {
+            (*health)--;
+            mapafterreading[new_x][new_y].symbol = '.';
+            mapafterreading[new_x][new_y].trap = false;
+        }
+        if(mapafterreading[new_x][new_y].symbol == '>'){// pele
+            char command;
+            if(new_x == spawn_x && new_y == spawn_y && *lvl > 1){
+                command = createMessageWindow("Do you want to go back?(press space)");
+                if (command ==  ' '){
+                    (*lvl)--;
+                }
+                
+            }else if(new_x != spawn_x && new_y != spawn_y){
+               
+                command = createMessageWindow("Do you want to go deeper?(press space)");
+                if (command ==  ' '){
+                    (*lvl)++;
+                }
+
+            }
+        }
+        if (*health <= 0) {
+            clear();
+            display_game_over();
+        }
+        mapafterreading[new_x][new_y].symbol = 'P';
+        reveal_points(mapafterreading, new_x, new_y, rows, cols, 8);
+        *x = new_x;
+        *y = new_y;
+    }
+}
+
 void displayScoreboard(WINDOW *win,struct User players[], int count, int start, const char *username) {
     werase(win);
     box(win, 0, 0); 
     mvwprintw(win, 0, (getmaxx(win) - 10) / 2, "[ Scoreboard ]");
+
     int usernameRank = -1; 
     for (int i = 0; i < count; i++) {
         if (strcmp(players[i].username, username) == 0) {
@@ -883,13 +1147,14 @@ void displayScoreboard(WINDOW *win,struct User players[], int count, int start, 
             break;
         }
     }
+
     int displayed = 0;
     for (int i = start; i < count && i < start + getmaxy(win) - 3; i++) { 
         if (strcmp(players[i].username, username) == 0 && usernameRank > 3) {
             wattron(win, A_BOLD | COLOR_PAIR(4));
             mvwprintw(win, i - start + 1, 2, "%d. %s - %d", i + 1, players[i].username, players[i].score);
             wattroff(win, A_BOLD | COLOR_PAIR(4)); 
-        }
+        } 
         else if (i == 0) {
             wattron(win, COLOR_PAIR(1)); 
             if(usernameRank-1 == i){
@@ -919,20 +1184,24 @@ void displayScoreboard(WINDOW *win,struct User players[], int count, int start, 
         }
         displayed = i;
     }
+
     if (usernameRank > 0 && (usernameRank - 1 < start || usernameRank - 1 > displayed)) {
         wattron(win, COLOR_PAIR(4)); 
         mvwprintw(win, getmaxy(win) - 2, 2, "Your Rank: %d. %s - %d", usernameRank, username, players[usernameRank - 1].score);
         wattroff(win, COLOR_PAIR(4));
     }
+
     wrefresh(win);
     wclear(win);
 }
+
 int readPlayersFromFile(const char *filename,struct User players[]) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         perror("Failed to open file");
         return 0;
     }
+
     int count = 0;
     char line[100];
     while (fgets(line, sizeof(line), file) && count < 100) {
@@ -944,9 +1213,11 @@ int readPlayersFromFile(const char *filename,struct User players[]) {
             count++;
         }
     }
+
     fclose(file);
     return count;
 }
+
 int comparePlayers(const void *a, const void *b) {
    struct User *playerA = (struct User *)a;
     struct User *playerB = (struct User *)b;
